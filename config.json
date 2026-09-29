@@ -1,8 +1,22 @@
 {
   "keywords": [
     "aiuto",
+    "aiutami",
+    "aiutami",
     "soccorso",
-    "emergenza"
+    "emergenza",
+    "help",
+    "help me",
+    "emergency",
+    "danger",
+    "secours",
+    "au secours",
+    "aide",
+    "urgence",
+    "hilfe",
+    "hilfe mir",
+    "notfall",
+    "notruf"
   ],
   "model_path": "models/vosk-model-small-it-0.22",
   "device_id": -1,
