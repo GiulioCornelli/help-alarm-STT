@@ -1,11 +1,16 @@
-# Binario
+# Binari
 /help-alarm
+/dist/
 
 # Log generati a runtime
 /logs/
 
 # Dipendenze native e modello linguistico: si scaricano con
-# ./scripts/setup.sh, non vanno nel repository
+# ./scripts/setup.sh (Linux) o scripts/setup.ps1 (Windows),
+# non vanno nel repository
 /third_party/vosk/*.so
 /third_party/vosk/*.h
+/third_party/vosk/*.dll
+/third_party/vosk/*.lib
+/third_party/vosk/bin/
 /models/

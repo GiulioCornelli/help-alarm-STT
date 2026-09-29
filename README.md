@@ -192,6 +192,69 @@ Se lo script non è adatto alla tua architettura, scarica `libvosk.so` da
 <https://github.com/alphacep/vosk-api/releases> e mettilo in `third_party/vosk/`,
 oppure usa Docker, che risolve il caso da solo.
 
+## Windows
+
+Su Windows la build è nativa, **non** in Docker: vedi la nota in fondo.
+
+### Cosa serve
+
+Un solo installatore: **[MSYS2](https://www.msys2.org/)**, che porta Go,
+gcc, make e unzip. Serve gcc perché il progetto usa cgo e Go, su Windows,
+non sa usare il compilatore di Visual Studio.
+
+Installazione guidata:
+
+1. scarica l'installer `msys2-x86_64-*.exe` e avvialo;
+2. lascia aperta la finestra "MSYS2 MSYS";
+3. installa Go, gcc e make:
+   ```bash
+   pacman -S --needed mingw-w64-ucrt-x86_64-gcc make
+   ```
+4. scarica l'ultima versione di Go **per Windows** da <https://go.dev/dl/> e
+   installala con l'installer `.msi`, accettando che aggiunga il `PATH`.
+
+### Download di libreria e modello
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+```
+
+Scarica `vosk-win64`, l'unico archivio Windows ufficiale di Vosk, che contiene
+già l'header C, la libreria di import e le DLL di runtime. Insieme al modello
+linguistico da 48 MB.
+
+### Compilare e avviare
+
+```bash
+make run
+```
+
+Oppure, se non vuoi usare `make`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+powershell -ExecutionPolicy Bypass -File scripts\run.ps1
+```
+
+L'eseguibile finisce in `dist\help-alarm.exe` **con le quattro DLL di Vosk
+accanto**: senza `libstdc++-6.dll`, `libwinpthread-1.dll` e
+`libgcc_s_seh-1.dll` Windows apre l'allarme con "libvosk.dll non trovata". Il
+Makefile se ne occupa da solo.
+
+L'audio su Windows passa per WASAPI, gestito da miniaudio: non serve ALSA né
+PulseAudio.
+
+### Perché non Docker su Windows
+
+Il container Linux gira dentro WSL2, e **WSL2 non ha accesso al microfono**.
+Non esiste `/dev/snd`, nonostante certe guide lo suggeriscano: l'uscita audio
+funziona tramite un socket Pulse, ma la cattura non è supportata, come
+confermato dal team WSL stesso. Un container Windows non serve a nulla, perché
+Go non usa MSVC con cgo.
+
+Risultato: in Docker su Windows il programma parte e scrive i log, ma non sente
+niente. La build nativa è l'unica strada che ascolta davvero.
+
 ## Build ed esecuzione
 
 ```bash
@@ -211,6 +274,9 @@ export CGO_CFLAGS="-I$PWD/third_party/vosk"
 export CGO_LDFLAGS="-L$PWD/third_party/vosk -lvosk -Wl,-rpath,$PWD/third_party/vosk"
 go build -o help-alarm .
 ```
+
+Su Windows gli stessi target funzionano dentro MSYS2: il `Makefile` rileva
+`OS=Windows_NT` da solo e produce `dist\help-alarm.exe`.
 
 Se `go` non è nel `PATH`, come nel caso di un'installazione manuale in
 `/usr/local/go/bin`, anteggi `export PATH=$PATH:/usr/local/go/bin`.
