@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeConfig(t *testing.T, body string) string {
@@ -42,11 +43,50 @@ func TestLoadValid(t *testing.T) {
 	if cfg.DeviceID != -1 {
 		t.Errorf("device_id = %d, atteso -1 (predefinito di sistema)", cfg.DeviceID)
 	}
+	if cfg.Cooldown() != 3*time.Second {
+		t.Errorf("cooldown = %v, atteso 3s come default", cfg.Cooldown())
+	}
 
 	// I percorsi relativi sono risolti rispetto alla directory della config.
 	want := filepath.Join(filepath.Dir(path), "m")
 	if cfg.AbsModelPath() != want {
 		t.Errorf("model path = %q, atteso %q", cfg.AbsModelPath(), want)
+	}
+	wantAlerts := filepath.Join(filepath.Dir(path), "logs/help-alarm-alerts.log")
+	if cfg.AbsAlertLogPath() != wantAlerts {
+		t.Errorf("alert log path = %q, atteso %q", cfg.AbsAlertLogPath(), wantAlerts)
+	}
+}
+
+func TestCooldownIsConfigurable(t *testing.T) {
+	path := writeConfig(t, `{"keywords":["aiuto"],"cooldown_seconds":0}`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// 0 disattiva il filtro: ogni match deve far scattare l'allarme.
+	if cfg.Cooldown() != 0 {
+		t.Errorf("cooldown = %v, atteso 0", cfg.Cooldown())
+	}
+
+	path = writeConfig(t, `{"keywords":["aiuto"],"cooldown_seconds":0.5}`)
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Cooldown() != 500*time.Millisecond {
+		t.Errorf("cooldown = %v, atteso 500ms", cfg.Cooldown())
+	}
+}
+
+func TestAlertLogFileIsOptional(t *testing.T) {
+	path := writeConfig(t, `{"keywords":["aiuto"],"alert_log_file":""}`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AbsAlertLogPath() != "" {
+		t.Errorf("alert log path = %q, attesa stringa vuota", cfg.AbsAlertLogPath())
 	}
 }
 
@@ -76,6 +116,7 @@ func TestLoadRejects(t *testing.T) {
 		{"livello di log ignoto", `{"keywords":["aiuto"],"model_path":"m","log_file":"l","log_level":"verboso"}`},
 		{"model path vuoto", `{"keywords":["aiuto"],"model_path":"  ","log_file":"l"}`},
 		{"log file vuoto", `{"keywords":["aiuto"],"model_path":"m","log_file":""}`},
+		{"cooldown negativo", `{"keywords":["aiuto"],"model_path":"m","log_file":"l","cooldown_seconds":-1}`},
 		{"json malformato", `{"keywords":`},
 	}
 

@@ -45,9 +45,10 @@ func run(configPath string) error {
 	}
 
 	logs, err := logging.New(logging.Options{
-		Path:   cfg.AbsLogPath(),
-		Level:  cfg.LogLevel,
-		Stdout: os.Stdout,
+		Path:      cfg.AbsLogPath(),
+		AlertPath: cfg.AbsAlertLogPath(),
+		Level:     cfg.LogLevel,
+		Stdout:    os.Stdout,
 	})
 	if err != nil {
 		return err
@@ -61,6 +62,8 @@ func run(configPath string) error {
 		"keywords", cfg.Keywords,
 		"modello", cfg.AbsModelPath(),
 		"log_file", cfg.AbsLogPath(),
+		"log_allarmi", alertLogPath(cfg),
+		"cooldown", cfg.Cooldown().String(),
 	)
 
 	matcher := keyword.New(cfg.Keywords)
@@ -68,9 +71,10 @@ func run(configPath string) error {
 		return errors.New("nessuna parola chiave utilizzabile nella configurazione")
 	}
 
-	// L'alert riceve il logger del solo file: la riga sul terminale è già
-	// scritta direttamente da lui e non deve essere duplicata.
-	alerter := alert.NewTerminal(os.Stdout, logs.File)
+	// L'alert riceve il logger del solo file allarmi: la riga sul terminale è
+	// già scritta direttamente da lui e non deve essere duplicata.
+	alerter := alert.NewTerminal(os.Stdout, logs.Alerts)
+	cooldown := alert.NewCooldown(cfg.Cooldown())
 
 	recognizer, err := stt.Open(cfg.AbsModelPath())
 	if err != nil {
@@ -121,7 +125,7 @@ func run(configPath string) error {
 				}
 				// Si analizzano anche le ipotesi parziali: permettono di
 				// reagire senza aspettare la fine della frase.
-				trigger(phrase, matcher, alerter, log)
+				trigger(phrase, matcher, alerter, cooldown, log)
 			}
 		}
 	}()
@@ -145,7 +149,7 @@ func run(configPath string) error {
 		log.Error("errore durante la trascrizione finale", "errore", err)
 	} else if phrase.Text != "" {
 		log.Info("trascrizione", "testo", phrase.Text)
-		trigger(phrase, matcher, alerter, log)
+		trigger(phrase, matcher, alerter, cooldown, log)
 	}
 
 	log.Info("arresto completato")
@@ -154,15 +158,32 @@ func run(configPath string) error {
 
 // trigger è il terzo stadio della catena: analizza la trascrizione e attiva
 // l'alert per ogni parola chiave trovata.
-func trigger(phrase stt.Phrase, matcher *keyword.Matcher, alerter alert.Alerter, log *slog.Logger) {
+func trigger(phrase stt.Phrase, matcher *keyword.Matcher, alerter alert.Alerter, cooldown *alert.Cooldown, log *slog.Logger) {
 	for _, m := range matcher.Find(phrase.Text) {
+		now := time.Now()
+		// Vosk rilancia la stessa parola a ogni blocco di 100 ms finché la
+		// persona parla: senza questo filtro un solo "aiuto" produrrebbe una
+		// raffica di righe identiche.
+		if !cooldown.Allow(m.Keyword, now) {
+			log.Debug("allarme soppresso dal cooldown", "keyword", m.Keyword, "trascrizione", m.Phrase)
+			continue
+		}
 		ev := alert.Event{
 			Keyword: m.Keyword,
 			Phrase:  m.Phrase,
-			At:      time.Now(),
+			At:      now,
 		}
 		if err := alerter.Trigger(ev); err != nil {
 			log.Error("errore durante l'attivazione dell'allarme", "errore", err)
 		}
 	}
+}
+
+// alertLogPath names the file that will receive the alarms, for the startup
+// log line.
+func alertLogPath(cfg *config.Config) string {
+	if p := cfg.AbsAlertLogPath(); p != "" {
+		return p
+	}
+	return cfg.AbsLogPath() + " (stesso file dei messaggi normali)"
 }

@@ -36,13 +36,16 @@ e segnala la parola chiave "aiuto" (o altre configurabili).
 ## Fase 5 — Allarme e logging
 - [x] 5.1 `internal/alert`: interfaccia `Alerter` — oggi solo `TerminalAlerter`, domani GPIO
 - [x] 5.2 Su match: stampa a terminale `aiuto rilevato, luce accesa`
-- [x] 5.3 `internal/logging`: `log/slog` su file (JSON, timestamp) + stream su console (testo)
+- [x] 5.3 `internal/logging`: `log/slog` su **due** file (messaggi normali e soli
+      allarmi) + stream su console (testo)
 - [x] 5.4 Log di tutti gli eventi: avvio, microfono, match, trascrizioni, arresti, errori
 
 ## Fase 6 — Integrazione
 - [x] 6.1 `main.go`: cablaggio config → audio → stt → keyword → alert → log
 - [x] 6.2 Gestione segnali SIGINT/SIGTERM per spegnere tutto senza perdere il log
 - [x] 6.3 Flag CLI: `-config` (default `config.json`), `-devices`
+- [x] 6.4 Cooldown per parola chiave (`cooldown_seconds`, default 3) per evitare
+      la raffica di allarmi ripetuti
 
 ## Fase 7 — Verifica
 - [x] 7.1 `gofmt` + `go vet` puliti
@@ -63,8 +66,12 @@ e segnala la parola chiave "aiuto" (o altre configurabili).
   spacciato in caso di driver che rifiutano la conversione.
 
 ## Note
-- Evento emesso **a ogni match**, anche sulle ipotesi parziali, senza cooldown:
-  una parola in una frase lunga può quindi generare più eventi di uno.
+- Le parole chiave sono cercate sia nelle ipotesi parziali sia nelle frasi
+  definitive; il `cooldown` (default 3 s) limita a uno ogni 3 secondi gli
+  allarmi della stessa parola chiave. Con `cooldown_seconds: 0` si torna al
+  comportamento senza filtro.
+- I log sono separati: `logs/help-alarm.log` per i messaggi normali,
+  `logs/help-alarm-alerts.log` solo per gli allarmi.
 - Solo microfono: nessuna modalità da file WAV.
 - Il GPIO/luce **non** viene implementato ora, solo l'interfaccia `Alerter`
   perché sia un'estensione di poche righe.

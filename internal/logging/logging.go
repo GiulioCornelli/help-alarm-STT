@@ -13,8 +13,12 @@ import (
 
 // Options configures the logger.
 type Options struct {
-	// Path is the log file. Its parent directory is created if missing.
+	// Path is the file with the ordinary messages. Its parent directory is
+	// created if missing.
 	Path string
+	// AlertPath is the file that receives only the alarm records. When it
+	// matches Path the two loggers share the same file handle.
+	AlertPath string
 	// Level is debug, info, warn or error.
 	Level string
 	// Stdout, when not nil, receives the human readable stream in addition
@@ -22,61 +26,90 @@ type Options struct {
 	Stdout io.Writer
 }
 
-// Logger exposes the two sinks separately: Console for the operator, File for
-// the durable record. They are distinct because the alarm prints its own line
-// on the terminal and must not be duplicated by the console handler.
+// Logger exposes the three sinks separately, because they must not be mixed:
+// Console is for the operator, File holds the running record and Alerts holds
+// only the events that triggered the alarm, so that log file can be watched or
+// shipped on its own.
 type Logger struct {
+	// Console writes to both Stdout and Path.
 	Console *slog.Logger
-	File    *slog.Logger
+	// File writes to Path only.
+	File *slog.Logger
+	// Alerts writes to AlertPath only.
+	Alerts *slog.Logger
 
-	closer io.Closer
+	closers []io.Closer
 }
 
-// Close releases the log file.
+// Close releases the log files.
 func (l *Logger) Close() error {
-	if l.closer == nil {
-		return nil
+	var firstErr error
+	for _, c := range l.closers {
+		if err := c.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return l.closer.Close()
+	return firstErr
 }
 
-// New opens the log file and returns the console and file loggers. The file
-// receives JSON records with a timestamp; the console receives text records
-// prefixed by their own timestamp.
+// New opens the log files and returns the console, file and alert loggers.
+// The ordinary file receives JSON records with a timestamp; the console
+// receives text records prefixed by their own timestamp.
 func New(opts Options) (*Logger, error) {
 	level, err := parseLevel(opts.Level)
 	if err != nil {
 		return nil, err
 	}
 
-	if dir := filepath.Dir(opts.Path); dir != "" {
+	logFile, err := open(opts.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	l := &Logger{closers: []io.Closer{logFile}}
+	l.File = slog.New(jsonHandler(logFile, level))
+
+	alertFile := logFile
+	if opts.AlertPath != "" && opts.AlertPath != opts.Path {
+		alertFile, err = open(opts.AlertPath)
+		if err != nil {
+			_ = logFile.Close()
+			return nil, err
+		}
+		l.closers = append(l.closers, alertFile)
+	}
+	l.Alerts = slog.New(jsonHandler(alertFile, level))
+
+	l.Console = slog.New(&fanout{handlers: []slog.Handler{jsonHandler(logFile, level)}})
+	if opts.Stdout != nil {
+		l.Console = slog.New(&fanout{handlers: []slog.Handler{
+			jsonHandler(logFile, level),
+			slog.NewTextHandler(
+				&lockedWriter{w: opts.Stdout},
+				&slog.HandlerOptions{Level: level, ReplaceAttr: withoutTime},
+			),
+		}})
+	}
+
+	return l, nil
+}
+
+func jsonHandler(w io.Writer, level slog.Level) slog.Handler {
+	return slog.NewJSONHandler(&lockedWriter{w: w}, &slog.HandlerOptions{Level: level})
+}
+
+// open creates the parent directory of path and opens the file in append mode.
+func open(path string) (*os.File, error) {
+	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("logging: creazione directory %s fallita: %w", dir, err)
 		}
 	}
-
-	file, err := os.OpenFile(opts.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("logging: apertura %s fallita: %w", opts.Path, err)
+		return nil, fmt.Errorf("logging: apertura %s fallita: %w", path, err)
 	}
-
-	l := &Logger{
-		File: slog.New(&fanout{handlers: []slog.Handler{
-			slog.NewJSONHandler(&lockedWriter{w: file}, &slog.HandlerOptions{Level: level}),
-		}}),
-		closer: file,
-	}
-
-	consoleHandlers := []slog.Handler{slog.NewJSONHandler(&lockedWriter{w: file}, &slog.HandlerOptions{Level: level})}
-	if opts.Stdout != nil {
-		consoleHandlers = append(consoleHandlers, slog.NewTextHandler(
-			&lockedWriter{w: opts.Stdout},
-			&slog.HandlerOptions{Level: level, ReplaceAttr: withoutTime},
-		))
-	}
-	l.Console = slog.New(&fanout{handlers: consoleHandlers})
-
-	return l, nil
+	return f, nil
 }
 
 func parseLevel(s string) (slog.Level, error) {

@@ -8,6 +8,8 @@
   "device_id": -1,
   "sample_rate": 16000,
   "log_file": "logs/help-alarm.log",
+  "alert_log_file": "logs/help-alarm-alerts.log",
   "log_level": "info",
-  "log_transcriptions": true
+  "log_transcriptions": true,
+  "cooldown_seconds": 3
 }

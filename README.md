@@ -69,7 +69,7 @@ help-alarm-STT/
 │   ├── audio/               apertura del microfono e callback PCM
 │   ├── stt/                 wrapper attorno a Vosk, parsing del JSON
 │   ├── keyword/             normalizzazione del testo e ricerca parole chiave
-│   ├── alert/               interfaccia Alerter + implementazione su terminale
+│   ├── alert/               interfaccia Alerter, cooldown e implementazione su terminale
 │   └── logging/             log/slog su file JSON e su console testuale
 │
 ├── models/                  modello Vosk (scaricato, non nel repository)
@@ -146,8 +146,10 @@ Tutto si configura da `config.json`:
   "device_id": -1,
   "sample_rate": 16000,
   "log_file": "logs/help-alarm.log",
+  "alert_log_file": "logs/help-alarm-alerts.log",
   "log_level": "info",
-  "log_transcriptions": true
+  "log_transcriptions": true,
+  "cooldown_seconds": 3
 }
 ```
 
@@ -157,9 +159,11 @@ Tutto si configura da `config.json`:
 | `model_path` | cartella del modello Vosk |
 | `device_id` | indice del microfono, `-1` = quello predefinito di sistema |
 | `sample_rate` | deve essere `16000`, è il valore che Vosk richiede |
-| `log_file` | percorso del file di log |
+| `log_file` | file con i messaggi normali (avvio, trascrizioni, errori) |
+| `alert_log_file` | file che riceve **solo** gli allarmi |
 | `log_level` | `debug`, `info`, `warn` o `error` |
 | `log_transcriptions` | se `true`, logga ogni frase riconosciuta |
+| `cooldown_seconds` | secondi minimi fra due allarmi della stessa parola chiave |
 
 Le chiavi omesse prendono il valore di default mostrato sopra. I percorsi
 relativi sono risolti rispetto alla cartella che contiene il file di
@@ -203,24 +207,39 @@ vuole scegliere esplicitamente il GPIO.
 
 ## Log
 
-Il programma scrive su due destinazioni diverse:
+Il programma scrive su tre destinazioni distinte, con logger separati perché non
+si mescolino:
 
-- **`logs/help-alarm.log`** — record JSON, uno per riga, con timestamp. È la
-  traccia durevole, pensata per essere letta da un programma esterno.
-- **console** — righe di testo leggibili, per chi guarda il terminale.
+| Destinazione | Contenuto |
+| --- | --- |
+| **`logs/help-alarm.log`** | messaggi normali: avvio, microfono, trascrizioni, errori, arresti |
+| **`logs/help-alarm-alerts.log`** | **solo** gli allarmi, in JSON con timestamp |
+| **console** | tutto, in formato testo leggibile |
+
+I due file sono in formato JSON, un record per riga, pensati per essere letti da
+un programma esterno.
 
 ```json
-{"time":"2026-09-29T15:42:07.118Z","level":"INFO","msg":"trascrizione","testo":"per favore aiuto"}
-{"time":"2026-09-29T15:42:07.120Z","level":"INFO","msg":"aiuto rilevato, luce accesa","timestamp":"2026-09-29T15:42:07.119Z","keyword":"aiuto","trascrizione":"per favore aiuto"}
+// logs/help-alarm.log
+{"time":"2026-09-29T16:10:19.001Z","level":"INFO","msg":"trascrizione","testo":"c'è perchè"}
+{"time":"2026-09-29T16:10:19.402Z","level":"INFO","msg":"trascrizione","testo":"aiuto"}
+
+// logs/help-alarm-alerts.log
+{"time":"2026-09-29T16:10:20.004Z","level":"INFO","msg":"aiuto rilevato, luce accesa","timestamp":"2026-09-29T16:10:20.003Z","keyword":"aiuto","trascrizione":"aiuto"}
 ```
 
-Ogni evento di allarme riporta `timestamp` (l'istante esatto in cui è stato
+Ogni record di allarme riporta `timestamp` (l'istante esatto in cui è stato
 rilevato), `keyword` (la parola configurata che ha scattato) e `trascrizione`
-(la frase in cui è stata trovata).
+(la frase in cui è stata trovata). Tenere gli allarmi in un file a parte
+permette a un altro programma — o a un invio di rete — di seguirlo in tempo
+reale con `tail -f`, senza filtrarlo via dal rumore delle trascrizioni.
 
 Per non ripetere la riga sul terminale, l'allarme scrive il messaggio sul
-terminale con una `fmt.Fprintf` e sul file con il logger: le due destinazioni
-hanno logger separati proprio per questo.
+terminale con una `fmt.Fprintf` e sul file col logger: le due destinazioni hanno
+logger separati proprio per questo.
+
+Se `alert_log_file` viene lasciato vuoto, gli allarmi finiscono nel file dei
+messaggi normali.
 
 ## Comportamento della rilevazione
 
@@ -229,19 +248,46 @@ definitive. Questo permette di reagire mentre la persona sta ancora parlando,
 senza aspettare che finisca la frase, che è il comportamento desiderato in un
 contesto di emergenza.
 
-La conseguenza è che una parola chiave detta in una frase lunga può generare
-più di un evento: "aiuto" viene riconosciuto come ipotesi parziale, poi di nuovo
-quando Vosk conferma la frase. **Non c'è nessun filtro né tempo di attesa**: ogni
-match emette un evento, come richiesto.
+### Perché esiste il cooldown
+
+Vosk emette una trascrizione **ogni 100 ms**. Finché la persona parla, la parola
+resta dentro l'ipotesi parziale e viene rilanciata identica decine di volte: un
+solo "aiuto" produceva una raffica di righe identiche nello stesso secondo, e di
+conseguenza il log degli allarmi era illeggibile e inutilizzabile per qualunque
+verifica automatica.
+
+`alert.Cooldown` risolve il problema tenendo traccia dell'ultimo istante in cui
+ogni parola chiave ha fatto scattare l'allarme: entro la finestra configurata i
+match successivi della **stessa** parola vengono scartati (e tracciati a livello
+`debug`). Una parola chiave diversa non è influenzata, e la parola scattata di
+nuovo dopo la finestra passano normalmente.
+
+```json
+"cooldown_seconds": 3
+```
+
+- `3` (default) — un allarme ogni 3 secondi per parola chiave
+- `0` — nessun filtro, ogni match emette un allarme (comportamento iniziale)
+- valore negativo — rifiutato dalla configurazione, è quasi certamente un errore
+
+Un valore troppo alto rischia di perdere un allarme reale, uno troppo basso
+riproduce la raffica. Per una sorveglianza continua 2-5 secondi è un buon
+compromesso.
 
 A ogni avvio e a ogni arresto, il programmo scrive cosa ha sentito:
 
 ```
-INFO avvio help-alarm keywords="[aiuto soccorso emergenza]" modello=...
+INFO avvio help-alarm keywords="[aiuto soccorso emergenza]" modello=... log_allarmi=.../logs/help-alarm-alerts.log cooldown=3s
 INFO microfono in ascolto dispositivo="Default Audio Device (predefinito) — 16000 Hz, s16 mono, periodo 100 ms"
 INFO trascrizione testo="per favore aiuto"
 INFO arresto in corso
 INFO arresto completato
+```
+
+e sul terminale, una sola volta per parola chiave entro il cooldown:
+
+```
+16:10:20 aiuto rilevato, luce accesa
 ```
 
 ## Arresto
@@ -296,9 +342,11 @@ make test
 ```
 
 I test coprono la normalizzazione e il riconoscimento a confine di parola delle
-parole chiave, il caricamento e la validazione della configurazione, il
-formattatore del log e la struttura del JSON di Vosk. Il riconoscimento della
-voce in sé richiede un microfono reale e si verifica lanciando il programma.
+parole chiave, il caricamento e la validazione della configurazione, la
+separazione dei due file di log, il comportamento del cooldown (compreso il caso
+della raffica da 10 match ravvicinati) e la struttura del JSON di Vosk. Il
+riconoscimento della voce in sé richiede un microfono reale e si verifica
+lanciando il programma.
 
 ## Note sui requisiti originali
 

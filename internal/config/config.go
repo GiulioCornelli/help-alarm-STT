@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Config holds every tunable parameter of the application.
@@ -19,12 +20,19 @@ type Config struct {
 	DeviceID int `json:"device_id"`
 	// SampleRate in Hz. Vosk requires 16000.
 	SampleRate int `json:"sample_rate"`
-	// LogFile is the path of the structured log file.
+	// LogFile is the path of the structured log file with the ordinary
+	// messages.
 	LogFile string `json:"log_file"`
+	// AlertLogFile is the path of the file that receives only the alarm
+	// records. If empty, the alarms go to LogFile.
+	AlertLogFile string `json:"alert_log_file"`
 	// LogLevel is one of: debug, info, warn, error.
 	LogLevel string `json:"log_level"`
 	// LogTranscriptions enables logging of every recognized phrase.
 	LogTranscriptions bool `json:"log_transcriptions"`
+	// CooldownSeconds is the minimum number of seconds between two alarms for
+	// the same keyword. Zero means no suppression, every match alarms.
+	CooldownSeconds float64 `json:"cooldown_seconds"`
 
 	// dir is the directory holding the config file, used to resolve the
 	// relative paths of ModelPath and LogFile.
@@ -45,8 +53,10 @@ func Load(path string) (*Config, error) {
 		DeviceID:          -1,
 		SampleRate:        voskSampleRate,
 		LogFile:           "logs/help-alarm.log",
+		AlertLogFile:      "logs/help-alarm-alerts.log",
 		LogLevel:          "info",
 		LogTranscriptions: true,
+		CooldownSeconds:   3,
 	}
 	if err := json.Unmarshal(raw, cfg); err != nil {
 		return nil, fmt.Errorf("config non valido %s: %w", path, err)
@@ -99,9 +109,16 @@ func (c *Config) normalize() error {
 	if strings.TrimSpace(c.LogFile) == "" {
 		return fmt.Errorf("config non valido: \"log_file\" è obbligatorio")
 	}
+	if c.CooldownSeconds < 0 {
+		return fmt.Errorf("config non valido: cooldown_seconds non può essere negativo, trovato %v", c.CooldownSeconds)
+	}
 
 	c.ModelPath = c.resolve(c.ModelPath)
 	c.LogFile = c.resolve(c.LogFile)
+	c.AlertLogFile = strings.TrimSpace(c.AlertLogFile)
+	if c.AlertLogFile != "" {
+		c.AlertLogFile = c.resolve(c.AlertLogFile)
+	}
 	return nil
 }
 
@@ -117,5 +134,15 @@ func (c *Config) resolve(p string) string {
 // AbsModelPath returns the absolute path of the Vosk model directory.
 func (c *Config) AbsModelPath() string { return c.ModelPath }
 
-// AbsLogPath returns the absolute path of the log file.
+// AbsLogPath returns the absolute path of the log file with the ordinary
+// messages.
 func (c *Config) AbsLogPath() string { return c.LogFile }
+
+// AbsAlertLogPath returns the absolute path of the file that receives only the
+// alarms. It is empty when the caller asked for them to go to the ordinary log.
+func (c *Config) AbsAlertLogPath() string { return c.AlertLogFile }
+
+// Cooldown returns the minimum time between two alarms for the same keyword.
+func (c *Config) Cooldown() time.Duration {
+	return time.Duration(c.CooldownSeconds * float64(time.Second))
+}
