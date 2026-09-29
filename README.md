@@ -105,8 +105,15 @@ docker compose down         # ferma e rimuove il container
 ```
 
 L'operatività quotidiana si riduce a `docker compose up -d`, e grazie a
-`restart: unless-stopped` il programma riparte da solo dopo un riavvio della
+`restart: unless-stopped` il programma ripparte da solo dopo un riavvio della
 macchina.
+
+Così com'è, il container parte in modalità silenziosa: scrive solo gli allarmi.
+Per la modalità dettagliata con le trascrizioni, senza toccare il compose:
+
+```bash
+docker compose run --rm help-alarm -v
+```
 
 ### Cosa mette dentro il compose
 
@@ -286,7 +293,12 @@ Se `go` non è nel `PATH`, come nel caso di un'installazione manuale in
 ```
 -config percorso   file di configurazione da usare (default: config.json)
 -devices           elenca i microfoni disponibili ed esci
+-v, -verbose       modalità dettagliata: mostra e salva tutto (trascrizioni comprese)
 ```
+
+Senza `-v` il programma tace. Sul terminale compare **solo** la riga di
+allarme, e nessuna parola pronunciata viene scritta o mostrata, a meno di non
+essere una parola chiave configurata.
 
 ## Configurazione
 
@@ -364,36 +376,51 @@ vuole scegliere esplicitamente il GPIO.
 
 ## Log
 
-Il programma scrive su tre destinazioni distinte, con logger separati perché non
-si mescolino:
+Il silenzio è il comportamento predefinito, e non una semplice questione di
+livello di log: senza `-v` nessuna parola pronunciata lascia il programma.
+
+| Cosa | Senza `-v` | Con `-v` |
+| --- | --- | --- |
+| **console** | solo la riga di allarme | avvio, microfono, trascrizioni, errori, arresti |
+| **`logs/help-alarm.log`** | non viene neppure creato | messaggi di funzionamento |
+| **`logs/help-alarm-alerts.log`** | **sempre** scritto | **sempre** scritto |
+
+Il silenzio è applicato nel logger, non nei chiamanti: `Console` e `File`
+scrivono su un Writer che scarta tutto. Così non basta dimenticarsi di togliere
+una `stampa` perché una parola finisca a schermo o su disco.
+
+Le tre destinazioni hanno logger separati perché non si mescolino:
 
 | Destinazione | Contenuto |
 | --- | --- |
-| **`logs/help-alarm.log`** | messaggi normali: avvio, microfono, trascrizioni, errori, arresti |
+| **`logs/help-alarm.log`** | messaggi di funzionamento, solo in modalità dettagliata |
 | **`logs/help-alarm-alerts.log`** | **solo** gli allarmi, in JSON con timestamp |
-| **console** | tutto, in formato testo leggibile |
+| **console** | la sola riga di allarme, oppure tutto in dettagliato |
 
 I due file sono in formato JSON, un record per riga, pensati per essere letti da
 un programma esterno.
 
 ```json
-// logs/help-alarm.log
-{"time":"2026-09-29T16:10:19.001Z","level":"INFO","msg":"trascrizione","testo":"c'è perchè"}
-{"time":"2026-09-29T16:10:19.402Z","level":"INFO","msg":"trascrizione","testo":"aiuto"}
-
 // logs/help-alarm-alerts.log
-{"time":"2026-09-29T16:10:20.004Z","level":"INFO","msg":"aiuto rilevato, luce accesa","timestamp":"2026-09-29T16:10:20.003Z","keyword":"aiuto","trascrizione":"aiuto"}
+{"time":"2026-09-29T16:10:20.004Z","level":"INFO","msg":"aiuto rilevato, luce accesa","timestamp":"2026-09-29T16:10:20.003Z","keyword":"aiuto"}
 ```
 
 Ogni record di allarme riporta `timestamp` (l'istante esatto in cui è stato
-rilevato), `keyword` (la parola configurata che ha scattato) e `trascrizione`
-(la frase in cui è stata trovata). Tenere gli allarmi in un file a parte
-permette a un altro programma — o a un invio di rete — di seguirlo in tempo
-reale con `tail -f`, senza filtrarlo via dal rumore delle trascrizioni.
+rilevato) e `keyword` (la parola configurata che ha scattato). **Non contiene la
+frase in cui la parola è stata trovata**: le altre parole pronunciate non vengono
+registrate, per scelta.
+
+Tenere gli allarmi in un file a parte permette a un altro programma — o a un
+invio di rete — di seguirlo in tempo reale con `tail -f`, senza doverlo filtrare
+dal rumore delle trascrizioni.
 
 Per non ripetere la riga sul terminale, l'allarme scrive il messaggio sul
 terminale con una `fmt.Fprintf` e sul file col logger: le due destinazioni hanno
 logger separati proprio per questo.
+
+La riga riporta la parola udita e non una parola fissa: un allarme su
+`emergenza` scrive `emergenza rilevato, luce accesa`, perché `Event` non ha
+nemmeno un campo dove mettere il resto della frase.
 
 Se `alert_log_file` viene lasciato vuoto, gli allarmi finiscono nel file dei
 messaggi normali.

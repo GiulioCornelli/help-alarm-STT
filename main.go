@@ -22,6 +22,12 @@ import (
 func main() {
 	configPath := flag.String("config", "config.json", "percorso del file di configurazione")
 	listDevices := flag.Bool("devices", false, "elenca i microfoni disponibili ed esci")
+
+	// -v e -verbose sono lo stesso interruttore: il secondo è più esplicito
+	// per chi non ricorda la forma breve.
+	var verbose bool
+	flag.BoolVar(&verbose, "v", false, "modalità dettagliata: mostra e salva tutto, trascrizioni comprese")
+	flag.BoolVar(&verbose, "verbose", false, "come -v")
 	flag.Parse()
 
 	if *listDevices {
@@ -32,23 +38,29 @@ func main() {
 		return
 	}
 
-	if err := run(*configPath); err != nil {
+	if err := run(*configPath, verbose); err != nil {
 		fmt.Fprintln(os.Stderr, "errore:", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath string) error {
+// run avvia il programma. Senza verbose il terminale resta muto e sul disco
+// finiscono solo i record di allarme: nessuna parola pronunciata viene scritta
+// o mostrata, a meno di non essere una parola chiave configurata.
+func run(configPath string, verbose bool) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
 	}
 
+	// Il silenzio è deciso qui e resta valido per tutto il programma: con
+	// verbose falso Console e File scartano ogni record.
 	logs, err := logging.New(logging.Options{
 		Path:      cfg.AbsLogPath(),
 		AlertPath: cfg.AbsAlertLogPath(),
 		Level:     cfg.LogLevel,
 		Stdout:    os.Stdout,
+		Verbose:   verbose,
 	})
 	if err != nil {
 		return err
@@ -170,7 +182,6 @@ func trigger(phrase stt.Phrase, matcher *keyword.Matcher, alerter alert.Alerter,
 		}
 		ev := alert.Event{
 			Keyword: m.Keyword,
-			Phrase:  m.Phrase,
 			At:      now,
 		}
 		if err := alerter.Trigger(ev); err != nil {

@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
-// Message è il testo stampato e registrato quando viene rilevata una parola chiave.
-const Message = "aiuto rilevato, luce accesa"
+// Message è il testo stampato e registrato quando viene rilevata una parola
+// chiave. Il segnaposto %s riceve la parola che ha fatto scattare l'allarme,
+// così la riga dice sempre quale parola è stata udita e non una parola fissa.
+const Message = "%s rilevato, luce accesa"
 
 // Cooldown sopprime gli allarmi ripetuti per la stessa parola chiave entro
 // una finestra temporale.
@@ -55,9 +57,13 @@ func (c *Cooldown) Allow(keyword string, now time.Time) bool {
 }
 
 // Event descrive una parola chiave rilevata.
+//
+// contiene solo la parola chiave, mai la frase in cui è stata trovata: è
+// l'unica forma in cui una parola pronunciata può finire su disco, e quella
+// deve essere sempre una delle parole chiave configurate. Le altre parole
+// restano in memoria, per il confronto, e non vengono registrate.
 type Event struct {
 	Keyword string
-	Phrase  string
 	At      time.Time
 }
 
@@ -90,8 +96,9 @@ func NewTerminal(out io.Writer, log *slog.Logger) *TerminalAlerter {
 // Name implementa Alerter.
 func (t *TerminalAlerter) Name() string { return t.name }
 
-// Trigger implementa Alerter: stampa "aiuto rilevato, luce accesa" sul
-// terminale e accoda una riga con l'orario nel file di log.
+// Trigger implementa Alerter: stampa la parola chiave rilevata sul terminale e
+// accoda una riga con l'orario nel file di log. Sul terminale non compare
+// nient'altro, così chi guarda la console vede subito l'emergenza.
 func (t *TerminalAlerter) Trigger(e Event) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -100,15 +107,16 @@ func (t *TerminalAlerter) Trigger(e Event) error {
 	if ts.IsZero() {
 		ts = t.now()
 	}
+	msg := fmt.Sprintf(Message, e.Keyword)
 
-	if _, err := fmt.Fprintf(t.out, "%s %s\n", ts.Format("15:04:05"), Message); err != nil {
+	if _, err := fmt.Fprintf(t.out, "%s %s\n", ts.Format("15:04:05"), msg); err != nil {
 		return fmt.Errorf("alert: scrittura su terminale fallita: %w", err)
 	}
 
-	t.log.Info(Message,
+	// Nessun altro testo oltre alla parola chiave: vedi la nota su Event.
+	t.log.Info(msg,
 		slog.Time("timestamp", ts),
 		slog.String("keyword", e.Keyword),
-		slog.String("trascrizione", e.Phrase),
 	)
 	return nil
 }

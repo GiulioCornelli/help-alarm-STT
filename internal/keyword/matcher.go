@@ -7,9 +7,10 @@ import (
 
 // Match è una singola occorrenza di parola chiave trovata in una trascrizione.
 type Match struct {
-	// Keyword is the keyword exactly as written in the configuration.
+	// Keyword è la parola chiave esattamente come scritta nella configurazione.
 	Keyword string
-	// Phrase is the transcription the keyword was found in.
+	// Phrase è la trascrizione in cui la parola chiave è stata trovata. Serve
+	// solo per il diagnostico in modalità dettagliata: non viene mai registrata.
 	Phrase string
 }
 
@@ -24,8 +25,9 @@ type entry struct {
 // scatta su "aiutone" né su "inaiuto". Le parole chiave che contengono
 // spazi sono cercate come sequenze di parole consecutive.
 type Matcher struct {
-	// byLength groups the keywords by word count, so a single pass over the
-	// tokens is enough and longer keywords are tested first.
+	// byLength raggruppa le parole chiave per numero di parole, così una
+	// sola passata sui token basta e le sequenze più lunghe vengono provate
+	// per prime.
 	byLength map[int][]entry
 	maxLen   int
 }
