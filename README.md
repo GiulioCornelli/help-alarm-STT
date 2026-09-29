@@ -114,8 +114,9 @@ macchina.
 | --- | --- |
 | `devices: /dev/snd` | porta dentro il container i dispositivi del microfono |
 | `group_add: ${AUDIO_GID:-29}` | i device appartengono a `root:audio`, serve quel gruppo |
-| volume `config.json` | modifichi la configurazione dall'host senza ricostruire |
-| volume `logs/` | i log restano sull'host dopo la chiusura del container |
+| `user: "0:0"` | un volume vuoto nasce di `root`, e serve potervi scrivere i log |
+| bind mount `config.json` | modifichi la configurazione dall'host senza ricostruire |
+| volume `logs` | i log finiscono in un volume di Docker, non nel progetto |
 | `stop_signal: SIGTERM` | arrivano al programma, che chiude audio e log in ordine |
 
 Se il tuo gruppo audio ha un gid diverso da 29, impostalo:
@@ -129,6 +130,34 @@ Oppure mettilo in un file `.env` accanto a `docker-compose.yml`:
 ```
 AUDIO_GID=29
 ```
+
+### Dove finiscono i log
+
+I log **non** scrivono nella cartella `logs/` del progetto, ma in un volume
+Docker chiamato `help-alarm-stt_logs`. Il vantaggio è che `docker compose down`
+non tocca i dati e il volume sopravvive a ricostruzioni dell'immagine.
+
+Per leggerli:
+
+```bash
+docker compose exec help-alarm tail -f /app/logs/help-alarm.log
+docker compose exec help-alarm tail -f /app/logs/help-alarm-alerts.log
+```
+
+Oppure copiarli fuori quando serve un file:
+
+```bash
+docker cp help-alarm:/app/logs/help-alarm-alerts.log .
+```
+
+Per cancellarli del tutto, compresi i dati storici:
+
+```bash
+docker compose down -v        # rimuove anche il volume dei log
+```
+
+Attenzione: `-v` è irreversibile. Se ti serve svuotare i log ma tenerli salvi,
+prima copiali fuori con `docker cp`.
 
 ### L'architettura dentro l'immagine
 
@@ -303,8 +332,8 @@ logger separati proprio per questo.
 Se `alert_log_file` viene lasciato vuoto, gli allarmi finiscono nel file dei
 messaggi normali.
 
-Con Docker i log restano comunque sull'host: la cartella `logs/` è montata nel
-container, quindi `docker compose down` non porta via la traccia.
+Con Docker i log finiscono in un volume dedicato, quindi `docker compose down`
+non porta via la traccia. Vedi la sezione «Dove finiscono i log».
 
 ## Comportamento della rilevazione
 
