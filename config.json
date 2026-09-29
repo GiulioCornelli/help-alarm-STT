@@ -1,0 +1,13 @@
+{
+  "keywords": [
+    "aiuto",
+    "soccorso",
+    "emergenza"
+  ],
+  "model_path": "models/vosk-model-small-it-0.22",
+  "device_id": -1,
+  "sample_rate": 16000,
+  "log_file": "logs/help-alarm.log",
+  "log_level": "info",
+  "log_transcriptions": true
+}
