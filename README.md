@@ -61,8 +61,11 @@ help-alarm-STT/
 ├── main.go                  cablaggio: config → audio → stt → keyword → alert
 ├── config.json              configurazione utente
 ├── Makefile                 build, test e run con i flag cgo già impostati
+├── Dockerfile               immagine multi-stadio: deps, build, runtime
+├── docker-compose.yml       avvio con microfono e volumi già configurati
+├── .dockerignore            esclude dall'immagine ciò che si ricrea
 ├── scripts/setup.sh         scarica libreria nativa Vosk + modello italiano
-├── TASKS.md                 elenco delle attività del progetto
+├── TASKS.md                 elenco delle attività del progeto
 │
 ├── internal/
 │   ├── config/              lettura e validazione di config.json
@@ -79,17 +82,74 @@ help-alarm-STT/
 
 ## Requisiti
 
+Con **Docker** (percorso consigliato) l'unico requisito è Docker stesso:
+l'immagine contiene Go, il compilatore C, la libreria Vosk e il modello
+linguistico.
+
+Senza Docker servono:
+
 - Go 1.21 o superiore (sviluppato con Go 1.23)
 - un compilatore C (`gcc` o `clang`): sia malgo sia Vosk usano cgo
 - Linux con ALSA oppure PulseAudio
 - un microfono
 
-## Installazione
+## Avvio con Docker
+
+Il modo più semplice: non devi installare Go, gcc né il modello Vosk.
 
 ```bash
-cd help-alarm-STT
-./scripts/setup.sh
+docker compose up -d        # costruisce l'immagine e avvia
+docker compose logs -f      # segue l'output
+docker compose stop         # ferma in modo ordinato
+docker compose down         # ferma e rimuove il container
 ```
+
+L'operatività quotidiana si riduce a `docker compose up -d`, e grazie a
+`restart: unless-stopped` il programma riparte da solo dopo un riavvio della
+macchina.
+
+### Cosa mette dentro il compose
+
+| Direttiva | Motivo |
+| --- | --- |
+| `devices: /dev/snd` | porta dentro il container i dispositivi del microfono |
+| `group_add: ${AUDIO_GID:-29}` | i device appartengono a `root:audio`, serve quel gruppo |
+| volume `config.json` | modifichi la configurazione dall'host senza ricostruire |
+| volume `logs/` | i log restano sull'host dopo la chiusura del container |
+| `stop_signal: SIGTERM` | arrivano al programma, che chiude audio e log in ordine |
+
+Se il tuo gruppo audio ha un gid diverso da 29, impostalo:
+
+```bash
+AUDIO_GID=$(getent group audio | cut -d: -f3) docker compose up -d
+```
+
+Oppure mettilo in un file `.env` accanto a `docker-compose.yml`:
+
+```
+AUDIO_GID=29
+```
+
+### L'architettura dentro l'immagine
+
+Il `Dockerfile` è a tre stadi, così l'immagine finale contiene solo il
+programma e non gli strumenti di compilazione:
+
+1. **deps** — scarica `libvosk.so`, `vosk_api.h` e il modello italiano
+2. **build** — compila il binario con cgo, in un'immagine con Go e gcc
+3. **runtime** — copia solo binario, libreria e modello
+
+L'architettura viene rilevata automaticamente (`TARGETARCH` di BuildKit), quindi
+lo stesso Dockerfile compila sia su PC a 64 bit sia su Raspberry Pi.
+
+Il modello Vosk pesa 48 MB e finisce nell'immagine: è un costo fisso di una
+build, ma in cambio `docker compose up` funziona anche senza connessione.
+
+## Installazione senza Docker
+
+Percorso consigliato se non vuoi usare Docker: `docker compose up -d` e basta.
+
+Se invece compili in locale, prima va eseguito `./scripts/setup.sh`.
 
 Lo script scarica due cose dentro il progetto, senza usare `sudo` e senza
 installare nulla a sistema:
@@ -100,11 +160,13 @@ installare nulla a sistema:
   italiano, l'unico supportato per ora dal progetto.
 
 Se lo script non è adatto alla tua architettura, scarica `libvosk.so` da
-<https://github.com/alphacep/vosk-api/releases> e mettilo in `third_party/vosk/`.
+<https://github.com/alphacep/vosk-api/releases> e mettilo in `third_party/vosk/`,
+oppure usa Docker, che risolve il caso da solo.
 
 ## Build ed esecuzione
 
 ```bash
+make setup     # scarica libreria Vosk e modello (una tantum)
 make build     # compila in ./help-alarm
 make run       # compila e avvia con config.json
 make test      # esegue i test
@@ -240,6 +302,9 @@ logger separati proprio per questo.
 
 Se `alert_log_file` viene lasciato vuoto, gli allarmi finiscono nel file dei
 messaggi normali.
+
+Con Docker i log restano comunque sull'host: la cartella `logs/` è montata nel
+container, quindi `docker compose down` non porta via la traccia.
 
 ## Comportamento della rilevazione
 

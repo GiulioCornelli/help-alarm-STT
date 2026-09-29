@@ -4,12 +4,20 @@
 #
 #   libreria : third_party/vosk/{libvosk.so,vosk_api.h}
 #   modello  : models/vosk-model-small-it-0.22/
+#
+# Serve solo se NON si usa Docker: chi lancia "docker compose up" non ha
+# bisogno di questo script, perché l'immagine contiene già tutto.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 VOSK_VERSION="0.3.45"
 MODEL_NAME="vosk-model-small-it-0.22"
+
+# Un'unica cartella temporanea per tutta l'esecuzione, con trap installato
+# subito: così viene pulita anche se lo script fallisce a metà.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p third_party/vosk models
 
@@ -22,8 +30,6 @@ if [[ -f third_party/vosk/libvosk.so && -f third_party/vosk/vosk_api.h ]]; then
 	echo "[ok] libreria Vosk già presente"
 else
 	echo "[..] scarico libreria Vosk ${VOSK_VERSION}"
-	tmp=$(mktemp -d)
-	trap 'rm -rf "$tmp"' EXIT
 
 	case "$(uname -m)" in
 	x86_64)
@@ -35,20 +41,23 @@ else
 	*)
 		echo "Architettura $(uname -m) non supportata da questo script."
 		echo "Scarica libvosk.so da https://github.com/alphacep/vosk-api/releases"
+		echo "oppure usa Docker: docker compose build"
 		exit 1
 		;;
 	esac
 
+	mkdir -p "$tmp/wheel" "$tmp/header"
+
 	curl -fsSL -o "$tmp/vosk.whl" \
 		"https://github.com/alphacep/vosk-api/releases/download/v${VOSK_VERSION}/${asset}"
-	curl -fsSL -o "$tmp/vosk-src.zip" \
+	curl -fsSL -o "$tmp/header.zip" \
 		"https://github.com/alphacep/vosk-api/releases/download/v${VOSK_VERSION}/vosk-linux-x86-${VOSK_VERSION}.zip"
 
-	unzip -q "$tmp/vosk.whl" -d "$tmp/whl"
-	unzip -q "$tmp/vosk-src.zip" -d "$tmp/src"
+	unzip -q "$tmp/vosk.whl" -d "$tmp/wheel"
+	unzip -q "$tmp/header.zip" -d "$tmp/header"
 
-	cp "$tmp"/whl/vosk/libvosk.so third_party/vosk/libvosk.so
-	cp "$tmp"/src/*/vosk_api.h third_party/vosk/vosk_api.h
+	cp "$tmp"/wheel/vosk/libvosk.so third_party/vosk/libvosk.so
+	cp "$tmp"/header/*/vosk_api.h third_party/vosk/vosk_api.h
 	chmod +x third_party/vosk/libvosk.so
 	echo "[ok] libreria Vosk installata in third_party/vosk"
 fi
@@ -58,13 +67,14 @@ if [[ -f "models/${MODEL_NAME}/am/final.mdl" ]]; then
 	echo "[ok] modello ${MODEL_NAME} già presente"
 else
 	echo "[..] scarico modello ${MODEL_NAME} (48 MB)"
-	tmp=$(mktemp -d)
+
 	curl -fsSL -o "$tmp/model.zip" \
 		"https://alphacephei.com/vosk/models/${MODEL_NAME}.zip"
-	unzip -q "$tmp/model.zip" -d models/
-	rm -rf "$tmp"
+	unzip -q "$tmp/model.zip" -d "$tmp/model"
+	mv "$tmp/model/${MODEL_NAME}" "models/${MODEL_NAME}"
 	echo "[ok] modello installato in models/${MODEL_NAME}"
 fi
 
 echo
-echo "Fatto. Compila con: make run   (oppure ./build.sh)"
+echo "Fatto. Compila con: make run"
+echo "In alternativa, senza dipendenze locali:  docker compose up -d"

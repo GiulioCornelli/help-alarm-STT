@@ -14,7 +14,8 @@ CGO_LDFLAGS := -L$(VOSK_DIR) -lvosk -Wl,-rpath,$(VOSK_DIR)
 export CGO_CFLAGS
 export CGO_LDFLAGS
 
-.PHONY: all setup build run devices test fmt vet clean
+.PHONY: all setup build run devices test fmt vet clean \
+	docker-build docker-up docker-down docker-logs
 
 all: build
 
@@ -42,3 +43,20 @@ vet:
 
 clean:
 	rm -f $(BIN)
+
+# --- Docker -----------------------------------------------------------------
+# Percorso senza dipendenze locali: Go, gcc, libreria Vosk e modello sono
+# dentro l'immagine. Serve solo Docker.
+
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d
+	docker compose logs -f
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f

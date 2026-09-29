@@ -1,0 +1,29 @@
+services:
+  help-alarm:
+    build:
+      context: .
+    image: help-alarm:latest
+    container_name: help-alarm
+
+    # I dispositivi ALSA dell'host: senza questi dentro il container non
+    # esiste alcun microfono. Vengono rilassati come permessi, non copiati.
+    devices:
+      - "/dev/snd:/dev/snd"
+
+    # I device node di /dev/snd appartengono a root:<ggruppo audio>. Con
+    # l'utente non root dell'immagine serve aggiungere quel gruppo, altrimenti
+    # l'apertura del microfono fallisce con "permission denied".
+    # Ricava il gid con:  getent group audio | cut -d: -f3
+    group_add:
+      - "${AUDIO_GID:-29}"
+
+    volumes:
+      # Configurazione: modificabile dall'host senza ricostruire l'immagine.
+      - ./config.json:/app/config.json:ro
+      # Log: devono restare sull'host dopo la chiusura del container.
+      - ./logs:/app/logs
+
+    # Ctrl+C e `docker compose stop` devono arrivare al programma, che spegne
+    # audio e log in modo ordinato.
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
