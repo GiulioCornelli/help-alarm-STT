@@ -8,16 +8,17 @@ import (
 	"time"
 )
 
-// Message is the text printed and logged when a keyword is detected.
+// Message è il testo stampato e registrato quando viene rilevata una parola chiave.
 const Message = "aiuto rilevato, luce accesa"
 
-// Cooldown suppresses repeated alarms for the same keyword within a time
-// window.
+// Cooldown sopprime gli allarmi ripetuti per la stessa parola chiave entro
+// una finestra temporale.
 //
-// It is needed because Vosk reports a transcription every 100 ms: while the
-// person is still talking, the same word stays inside the partial hypothesis
-// and would fire once per audio chunk. Without this, a single "aiuto" produces
-// a burst of identical alarm lines and the real log signal is lost.
+// Serve perché Vosk emette una trascrizione ogni 100 ms: mentre la persona sta
+// ancora parlando, la parola resta dentro l'ipotesi parziale e farebbe
+// scattare l'allarme una volta per ogni blocco di audio. Senza questo filtro un
+// solo "aiuto" produrrebbe una raffica di righe identiche e il segnale reale
+// andrebbe perso nel rumore.
 type Cooldown struct {
 	window time.Duration
 
@@ -25,9 +26,9 @@ type Cooldown struct {
 	last map[string]time.Time
 }
 
-// NewCooldown returns a Cooldown with the given window. A window of zero or
-// less disables the suppression and allows every match, as the naive
-// behaviour.
+// NewCooldown restituisce un Cooldown con la finestra indicata. Una finestra
+// nulla o negativa disattiva la soppressione e lascia passare ogni match,
+// come nel comportamento naif.
 func NewCooldown(window time.Duration) *Cooldown {
 	return &Cooldown{
 		window: window,
@@ -35,9 +36,10 @@ func NewCooldown(window time.Duration) *Cooldown {
 	}
 }
 
-// Allow reports whether an alarm for keyword at time now should be raised. It
-// returns false when the same keyword already fired less than window ago, and
-// records the new time when it returns true.
+// Allow indica se per la parola chiave keyword all'istante now deve essere
+// emesso un allarme. Restituisce false quando la stessa parola chiave ha già
+// fatto scattare l'allarme meno di window fa, e in caso contrario registra il
+// nuovo istante.
 func (c *Cooldown) Allow(keyword string, now time.Time) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -52,26 +54,26 @@ func (c *Cooldown) Allow(keyword string, now time.Time) bool {
 	return true
 }
 
-// Event describes a detected keyword.
+// Event descrive una parola chiave rilevata.
 type Event struct {
 	Keyword string
 	Phrase  string
 	At      time.Time
 }
 
-// Alerter reacts to a detected keyword.
+// Alerter reagisce a una parola chiave rilevata.
 //
-// The GPIO light will be added later as another implementation of this
-// interface: the rest of the program does not need to change.
+// La luce con GPIO verrà aggiunta in futuro come altra implementazione di
+// questa interfaccia: il resto del programma non dovrà cambiare.
 type Alerter interface {
-	// Name identifies the alerter in the logs.
+	// Name identifica l'alerter nei log.
 	Name() string
-	// Trigger is called for every detected keyword.
+	// Trigger viene chiamata per ogni parola chiave rilevata.
 	Trigger(Event) error
 }
 
-// TerminalAlerter prints the event on the terminal and writes it to the log
-// file with a timestamp.
+// TerminalAlerter stampa l'evento sul terminale e lo scrive nel file di log
+// con un indicatore di tempo.
 type TerminalAlerter struct {
 	out  io.Writer
 	log  *slog.Logger
@@ -80,16 +82,16 @@ type TerminalAlerter struct {
 	name string
 }
 
-// NewTerminal builds an Alerter writing on out and logging on log.
+// NewTerminal costruisce un Alerter che scrive su out e registra su log.
 func NewTerminal(out io.Writer, log *slog.Logger) *TerminalAlerter {
 	return &TerminalAlerter{out: out, log: log, now: time.Now, name: "terminal"}
 }
 
-// Name implements Alerter.
+// Name implementa Alerter.
 func (t *TerminalAlerter) Name() string { return t.name }
 
-// Trigger implements Alerter: it prints "aiuto rilevato, luce accesa" on the
-// terminal and appends a timestamped line to the log file.
+// Trigger implementa Alerter: stampa "aiuto rilevato, luce accesa" sul
+// terminale e accoda una riga con l'orario nel file di log.
 func (t *TerminalAlerter) Trigger(e Event) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

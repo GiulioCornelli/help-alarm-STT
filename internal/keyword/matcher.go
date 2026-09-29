@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-// Match is a single keyword occurrence found inside a transcription.
+// Match è una singola occorrenza di parola chiave trovata in una trascrizione.
 type Match struct {
 	// Keyword is the keyword exactly as written in the configuration.
 	Keyword string
@@ -18,11 +18,11 @@ type entry struct {
 	tokens   []string
 }
 
-// Matcher looks for configured keywords in transcriptions.
+// Matcher cerca nelle trascrizioni le parole chiave configurate.
 //
-// A keyword matches only on whole words, so "aiuto" does not fire on "aiutone"
-// or "inaiuto". Keywords containing spaces are matched as sequences of
-// consecutive words.
+// Una parola chiave scatta solo a confine di parola, quindi "aiuto" non
+// scatta su "aiutone" né su "inaiuto". Le parole chiave che contengono
+// spazi sono cercate come sequenze di parole consecutive.
 type Matcher struct {
 	// byLength groups the keywords by word count, so a single pass over the
 	// tokens is enough and longer keywords are tested first.
@@ -30,8 +30,9 @@ type Matcher struct {
 	maxLen   int
 }
 
-// New builds a Matcher for the given keywords. Keywords are normalized the same
-// way transcriptions are, so matching is insensitive to case and punctuation.
+// New costruisce un Matcher per le parole chiave indicate. Le parole chiave
+// vengono normalizzate come le trascrizioni, quindi il confronto non distingue
+// maiuscole, minuscole e punteggiatura.
 func New(keywords []string) *Matcher {
 	m := &Matcher{byLength: make(map[int][]entry)}
 	for _, k := range keywords {
@@ -48,10 +49,11 @@ func New(keywords []string) *Matcher {
 	return m
 }
 
-// Empty reports whether the matcher has no usable keyword.
+// Empty indica se il matcher non ha nessuna parola chiave utilizzabile.
 func (m *Matcher) Empty() bool { return m.maxLen == 0 }
 
-// Find returns every keyword occurrence in phrase, in order of appearance.
+// Find restituisce ogni occorrenza di parola chiave in phrase, nell'ordine in
+// cui compare.
 func (m *Matcher) Find(phrase string) []Match {
 	if m.Empty() {
 		return nil
@@ -77,8 +79,8 @@ func (m *Matcher) Find(phrase string) []Match {
 	return matches
 }
 
-// tokenize lowercases the text, turns every non alphanumeric character into a
-// space and splits the result into words.
+// tokenize mette in minuscolo il testo, trasforma ogni carattere non
+// alfanumerico in uno spazio e divide il risultato in parole.
 func tokenize(s string) []string {
 	var b strings.Builder
 	b.Grow(len(s))

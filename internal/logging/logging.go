@@ -13,35 +13,35 @@ import (
 
 // Options configures the logger.
 type Options struct {
-	// Path is the file with the ordinary messages. Its parent directory is
-	// created if missing.
+	// Path è il file con i messaggi ordinari. La cartella che lo contiene
+	// viene creata se manca.
 	Path string
-	// AlertPath is the file that receives only the alarm records. When it
-	// matches Path the two loggers share the same file handle.
+	// AlertPath è il file che riceve i soli record di allarme. Se coincide
+	// con Path i due logger condividono lo stesso file.
 	AlertPath string
-	// Level is debug, info, warn or error.
+	// Level è debug, info, warn oppure error.
 	Level string
-	// Stdout, when not nil, receives the human readable stream in addition
-	// to the structured one written to Path.
+	// Stdout, se non è nil, riceve il flusso leggibile oltre a quello
+	// strutturato scritto in Path.
 	Stdout io.Writer
 }
 
-// Logger exposes the three sinks separately, because they must not be mixed:
-// Console is for the operator, File holds the running record and Alerts holds
-// only the events that triggered the alarm, so that log file can be watched or
-// shipped on its own.
+// Logger espone separatamente le tre destinazioni, perché non devono essere
+// mescolate: Console serve a chi guarda il terminale, File conserva la
+// traccia di funzionamento e Alerts contiene solo gli eventi che hanno fatto
+// scattare l'allarme, così quel file può essere seguito o spedito da solo.
 type Logger struct {
-	// Console writes to both Stdout and Path.
+	// Console scrive sia su Stdout sia su Path.
 	Console *slog.Logger
-	// File writes to Path only.
+	// File scrive solo su Path.
 	File *slog.Logger
-	// Alerts writes to AlertPath only.
+	// Alerts scrive solo su AlertPath.
 	Alerts *slog.Logger
 
 	closers []io.Closer
 }
 
-// Close releases the log files.
+// Close chiude i file di log.
 func (l *Logger) Close() error {
 	var firstErr error
 	for _, c := range l.closers {
@@ -52,9 +52,9 @@ func (l *Logger) Close() error {
 	return firstErr
 }
 
-// New opens the log files and returns the console, file and alert loggers.
-// The ordinary file receives JSON records with a timestamp; the console
-// receives text records prefixed by their own timestamp.
+// New apre i file di log e restituisce i logger per console, file e allarmi.
+// Il file ordinario riceve record JSON con indicatore di tempo; la console
+// riceve record di testo preceduti dal proprio orario.
 func New(opts Options) (*Logger, error) {
 	level, err := parseLevel(opts.Level)
 	if err != nil {
@@ -98,7 +98,7 @@ func jsonHandler(w io.Writer, level slog.Level) slog.Handler {
 	return slog.NewJSONHandler(&lockedWriter{w: w}, &slog.HandlerOptions{Level: level})
 }
 
-// open creates the parent directory of path and opens the file in append mode.
+// open crea la cartella che contiene path e apre il file in modalità append.
 func open(path string) (*os.File, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -127,8 +127,8 @@ func parseLevel(s string) (slog.Level, error) {
 	}
 }
 
-// withoutTime drops the duplicated "time" key from the console handler, the
-// console already prints it.
+// withoutTime elimina dal logger di console la chiave "time" duplicata,
+// perché la console la stampa già.
 func withoutTime(groups []string, a slog.Attr) slog.Attr {
 	if len(groups) == 0 && a.Key == slog.TimeKey {
 		return slog.Attr{}
@@ -136,7 +136,7 @@ func withoutTime(groups []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-// fanout sends every record to a set of handlers.
+// fanout invia ogni record a un insieme di handler.
 type fanout struct {
 	handlers []slog.Handler
 }
@@ -176,8 +176,8 @@ func (f *fanout) WithGroup(name string) slog.Handler {
 	return &fanout{handlers: next}
 }
 
-// lockedWriter serializes writes, since the handlers run from several
-// goroutines and os.File is not safe for interleaved writes.
+// lockedWriter serializza le scritture, perché gli handler girano su più
+// goroutine e os.File non è sicuro per scritture intercalate.
 type lockedWriter struct {
 	mu sync.Mutex
 	w  io.Writer

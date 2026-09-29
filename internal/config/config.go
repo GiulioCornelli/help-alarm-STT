@@ -9,39 +9,41 @@ import (
 	"time"
 )
 
-// Config holds every tunable parameter of the application.
+// Config raccoglie ogni parametro regolabile dell'applicazione.
 type Config struct {
-	// Keywords to detect in the transcription. Single words and multi-word
-	// phrases are both supported.
+	// Keywords da cercare nella trascrizione. Sono supportate sia le singole
+	// parole sia le frasi di più parole.
 	Keywords []string `json:"keywords"`
-	// ModelPath is the directory of the Vosk acoustic model.
+	// ModelPath è la cartella del modello acustico Vosk.
 	ModelPath string `json:"model_path"`
-	// DeviceID selects the capture device. -1 means "system default".
+	// DeviceID indica il dispositivo di cattura. -1 significa "quello
+	// predefinito di sistema".
 	DeviceID int `json:"device_id"`
-	// SampleRate in Hz. Vosk requires 16000.
+	// SampleRate in Hz. Vosk richiede 16000.
 	SampleRate int `json:"sample_rate"`
-	// LogFile is the path of the structured log file with the ordinary
-	// messages.
+	// LogFile è il percorso del file di log strutturato con i messaggi
+	// ordinari.
 	LogFile string `json:"log_file"`
-	// AlertLogFile is the path of the file that receives only the alarm
-	// records. If empty, the alarms go to LogFile.
+	// AlertLogFile è il percorso del file che riceve i soli record di
+	// allarme. Se è vuoto gli allarmi finiscono in LogFile.
 	AlertLogFile string `json:"alert_log_file"`
-	// LogLevel is one of: debug, info, warn, error.
+	// LogLevel è uno tra: debug, info, warn, error.
 	LogLevel string `json:"log_level"`
-	// LogTranscriptions enables logging of every recognized phrase.
+	// LogTranscriptions abilita la registrazione di ogni frase riconosciuta.
 	LogTranscriptions bool `json:"log_transcriptions"`
-	// CooldownSeconds is the minimum number of seconds between two alarms for
-	// the same keyword. Zero means no suppression, every match alarms.
+	// CooldownSeconds è il numero minimo di secondi fra due allarmi della
+	// stessa parola chiave. Zero significa nessuna soppressione: ogni match
+	// fa scattare l'allarme.
 	CooldownSeconds float64 `json:"cooldown_seconds"`
 
-	// dir is the directory holding the config file, used to resolve the
-	// relative paths of ModelPath and LogFile.
+	// dir è la cartella che contiene il file di configurazione, usata per
+	// risolvere i percorsi relativi di ModelPath e LogFile.
 	dir string
 }
 
 const voskSampleRate = 16000
 
-// Load reads and validates the configuration from path.
+// Load legge e valida la configurazione contenuta nel file path.
 func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -122,8 +124,8 @@ func (c *Config) normalize() error {
 	return nil
 }
 
-// resolve turns a possibly relative path into an absolute one, relative to the
-// directory containing the config file.
+// resolve trasforma un percorso eventualmente relativo in uno assoluto,
+// relativo alla cartella che contiene il file di configurazione.
 func (c *Config) resolve(p string) string {
 	if filepath.IsAbs(p) {
 		return filepath.Clean(p)
@@ -131,18 +133,19 @@ func (c *Config) resolve(p string) string {
 	return filepath.Clean(filepath.Join(c.dir, p))
 }
 
-// AbsModelPath returns the absolute path of the Vosk model directory.
+// AbsModelPath restituisce il percorso assoluto della cartella del modello Vosk.
 func (c *Config) AbsModelPath() string { return c.ModelPath }
 
-// AbsLogPath returns the absolute path of the log file with the ordinary
-// messages.
+// AbsLogPath restituisce il percorso assoluto del file di log dei messaggi
+// ordinari.
 func (c *Config) AbsLogPath() string { return c.LogFile }
 
-// AbsAlertLogPath returns the absolute path of the file that receives only the
-// alarms. It is empty when the caller asked for them to go to the ordinary log.
+// AbsAlertLogPath restituisce il percorso assoluto del file che riceve i soli
+// allarmi. È vuoto quando il chiamante ha chiesto che finiscano nel log
+// ordinario.
 func (c *Config) AbsAlertLogPath() string { return c.AlertLogFile }
 
-// Cooldown returns the minimum time between two alarms for the same keyword.
+// Cooldown restituisce il tempo minimo fra due allarmi della stessa parola chiave.
 func (c *Config) Cooldown() time.Duration {
 	return time.Duration(c.CooldownSeconds * float64(time.Second))
 }

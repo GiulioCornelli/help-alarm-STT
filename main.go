@@ -179,8 +179,7 @@ func trigger(phrase stt.Phrase, matcher *keyword.Matcher, alerter alert.Alerter,
 	}
 }
 
-// alertLogPath names the file that will receive the alarms, for the startup
-// log line.
+// alertLogPath indica il file che riceverà gli allarmi, per la riga di avvio.
 func alertLogPath(cfg *config.Config) string {
 	if p := cfg.AbsAlertLogPath(); p != "" {
 		return p

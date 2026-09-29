@@ -9,31 +9,32 @@ import (
 	vosk "github.com/alphacep/vosk-api/go"
 )
 
-// Phrase is one transcription emitted by the recognizer.
+// Phrase è una trascrizione emessa dal riconoscitore.
 type Phrase struct {
 	Text string
-	// Partial is true when the text is only the current hypothesis and can
-	// still change with the following audio.
+	// Partial è vera quando il testo è solo l'ipotesi corrente e può quindi
+	// cambiare con l'audio successivo.
 	Partial bool
 }
 
-// Result is the subset of the Vosk JSON payload that we care about.
-// A final result looks like {"text": "..."} while a partial hypothesis looks
-// like {"partial": "..."}: in both cases the transcription is a plain string.
+// Result è la parte del JSON di Vosk che ci interessa.
+// Un risultato definitivo ha la forma {"text": "..."} mentre un'ipotesi
+// parziale ha la forma {"partial": "..."}: in entrambi i casi la trascrizione
+// è una stringa semplice.
 type Result struct {
 	Text    string `json:"text"`
 	Partial string `json:"partial"`
 }
 
-// Recognizer wraps a Vosk model and turns raw PCM into Phrases.
-// It is not safe for concurrent use: a single goroutine owns it.
+// Recognizer avvolge un modello Vosk e trasforma PCM grezzi in Phrase.
+// Non è sicuro per l'uso concorrente: ne possiede una sola goroutine.
 type Recognizer struct {
 	model *vosk.VoskModel
 	rec   *vosk.VoskRecognizer
 }
 
-// Open loads the Vosk model located at modelPath. The directory must contain
-// the files produced by the vosk-model-small-it-* archives (am/, conf/, graph/).
+// Open carica il modello Vosk situato in modelPath. La cartella deve contenere
+// i file prodotti dagli archivi vosk-model-small-it-* (am/, conf/, graph/).
 func Open(modelPath string) (*Recognizer, error) {
 	if err := checkModel(modelPath); err != nil {
 		return nil, err
@@ -71,11 +72,11 @@ func checkModel(modelPath string) error {
 	return nil
 }
 
-// Accept feeds a PCM chunk (s16, mono, 16 kHz) to the recognizer.
+// Accept passa un blocco di PCM (s16, mono, 16 kHz) al riconoscitore.
 //
-// When final is true Vosk detected the end of an utterance and Phrase.Text is
-// the complete transcription. Otherwise the returned Phrase is the current
-// hypothesis and can still be revised by the following calls.
+// Quando final è vera Vosk ha rilevato la fine di un enunciato e Phrase.Text
+// è la trascrizione completa. Altrimenti la Phrase restituita è l'ipotesi
+// corrente, che le chiamate successive possono ancora correggere.
 func (r *Recognizer) Accept(pcm []byte) (Phrase, bool, error) {
 	if r.rec.AcceptWaveform(pcm) != 0 {
 		text, err := parseText(r.rec.Result())
@@ -92,8 +93,8 @@ func (r *Recognizer) Accept(pcm []byte) (Phrase, bool, error) {
 	return Phrase{Text: text, Partial: true}, false, nil
 }
 
-// Flush asks Vosk to emit the utterance still in flight without waiting for
-// silence. It returns an empty Phrase when there was nothing pending.
+// Flush chiede a Vosk di emettere l'enunciato ancora in corso senza aspettare
+// il silenzio. Restituisce una Phrase vuota quando non c'era nulla in sospeso.
 func (r *Recognizer) Flush() (Phrase, error) {
 	if r.rec == nil {
 		return Phrase{}, nil
@@ -105,7 +106,7 @@ func (r *Recognizer) Flush() (Phrase, error) {
 	return Phrase{Text: text}, nil
 }
 
-// Close frees the native resources. It is safe to call more than once.
+// Close libera le risorse native. Si può chiamare più di una volta.
 func (r *Recognizer) Close() {
 	if r.rec != nil {
 		r.rec.Free()
@@ -117,8 +118,8 @@ func (r *Recognizer) Close() {
 	}
 }
 
-// parseText extracts the transcription from a Vosk JSON payload, whether it is
-// a final result ({"text": ...}) or a partial one ({"partial": {"text": ...}}).
+// parseText estrae la trascrizione da un JSON di Vosk, che sia un risultato
+// definitivo ({"text": ...}) sia un'ipotesi parziale ({"partial": ...}).
 func parseText(payload string) (string, error) {
 	var res Result
 	if err := json.Unmarshal([]byte(payload), &res); err != nil {

@@ -8,20 +8,21 @@ import (
 	"github.com/gen2brain/malgo"
 )
 
-// Config describes which capture device to open and in which PCM format.
+// Config descrive quale dispositivo di acquisizione aprire e in quale formato PCM	.
 type Config struct {
-	// DeviceID selects the capture device. A negative value means "system
-	// default"; otherwise it is the index returned by ListDevices.
+	// DeviceID indica il dispositivo di cattura. Un valore negativo significa
+	// "quello predefinito di sistema"; altrimenti è l'indice restituito da
+	// ListDevices.
 	DeviceID int
-	// SampleRate in Hz. Vosk requires 16000.
+	// SampleRate in Hz. Vosk richiede 16000.
 	SampleRate uint32
 }
 
-// Capture streams raw PCM frames from a microphone.
+// Capture trasmette in streaming blocchi di PCM grezzi da un microfono.
 //
-// The frames are produced by miniaudio on its own audio thread: the callback
-// only copies the buffer and hands it over to a channel, it never blocks, so
-// the audio thread is never stalled by the downstream pipeline.
+// I blocchi sono prodotti da miniaudio sul proprio thread audio: la callback
+// copia soltanto il buffer e lo consegna a un canale, non blocca mai, così il
+// thread audio non viene mai fermato dalla catena di elaborazione a valle.
 type Capture struct {
 	cfg    Config
 	ctx    *malgo.AllocatedContext
@@ -32,14 +33,14 @@ type Capture struct {
 	once sync.Once
 }
 
-// backendsForPlatform lists the audio backends to try, in order. ALSA comes
-// first so that a plain Linux box without a sound server still works.
+// backendsForPlatform elenca in ordine i backend audio da provare. ALSA viene
+// per primo, così una Linux senza sound server funziona comunque.
 func backendsForPlatform() []malgo.Backend {
 	return []malgo.Backend{malgo.BackendAlsa, malgo.BackendPulseaudio}
 }
 
-// ListDevices writes the available capture devices to w, with the index to put
-// in "device_id" in the configuration file.
+// ListDevices scrive su w i dispositivi di cattura disponibili, con l'indice
+// da mettere in "device_id" nel file di configurazione.
 func ListDevices(w io.Writer) error {
 	backends := backendsForPlatform()
 	allocCtx, err := malgo.InitContext(backends, malgo.ContextConfig{}, func(string) {})
@@ -70,7 +71,7 @@ func ListDevices(w io.Writer) error {
 	return nil
 }
 
-// New opens the capture device but does not start streaming yet.
+// New apre il dispositivo di cattura ma non avvia ancora lo streaming.
 func New(cfg Config) (*Capture, error) {
 	if cfg.SampleRate == 0 {
 		return nil, fmt.Errorf("audio: sample rate mancante")
@@ -125,9 +126,10 @@ func New(cfg Config) (*Capture, error) {
 	return c, nil
 }
 
-// verifyFormat makes sure miniaudio really handed us the PCM Vosk expects. If
-// the driver refused the conversion the transcription would be garbage, so it
-// is better to stop here than to silently report "nessun testo riconosciuto".
+// verifyFormat controlla che miniaudio ci abbia davvero consegnato il PCM che
+// Vosk si aspetta. Se il driver avesse rifiutato la conversione la trascrizione
+// sarebbe spazzatura: meglio fermarsi qui che segnalare silenziosamente
+// "nessun testo riconosciuto".
 func (c *Capture) verifyFormat() error {
 	if got := c.device.SampleRate(); got != c.cfg.SampleRate {
 		return fmt.Errorf("audio: il dispositivo è a %d Hz invece dei %d Hz richiesti", got, c.cfg.SampleRate)
@@ -141,8 +143,8 @@ func (c *Capture) verifyFormat() error {
 	return nil
 }
 
-// applyDeviceID selects an explicit capture device, or the system default when
-// cfg.DeviceID is negative.
+// applyDeviceID seleziona un dispositivo di cattura esplicito, oppure quello
+// predefinito di sistema quando cfg.DeviceID è negativo.
 func (c *Capture) applyDeviceID(deviceCfg *malgo.DeviceConfig) error {
 	c.name = "dispositivo predefinito"
 	if c.cfg.DeviceID < 0 {
@@ -177,7 +179,7 @@ func (c *Capture) resolveName() string {
 	return "predefinito"
 }
 
-// onData is the miniaudio callback. It must never block.
+// onData è la callback di miniaudio. Non deve mai bloccare.
 func (c *Capture) onData(_, input []byte, _ uint32) {
 	if len(input) == 0 {
 		return
@@ -193,8 +195,8 @@ func (c *Capture) onData(_, input []byte, _ uint32) {
 	}
 }
 
-// Start begins streaming. Frames become readable on the channel returned by
-// Frames.
+// Start avvia lo streaming. I blocchi diventano leggibili sul canale restituito
+// da Frames.
 func (c *Capture) Start() error {
 	if err := c.device.Start(); err != nil {
 		return fmt.Errorf("audio: avvio stream fallito: %w", err)
@@ -202,10 +204,10 @@ func (c *Capture) Start() error {
 	return nil
 }
 
-// Frames returns the channel of PCM chunks. It is closed by Stop.
+// Frames restituisce il canale dei blocchi PCM. Viene chiuso da Stop.
 func (c *Capture) Frames() <-chan []byte { return c.ch }
 
-// Stop halts the stream and releases the device and the context.
+// Stop ferma lo streaming e libera il dispositivo e il contesto.
 func (c *Capture) Stop() {
 	c.once.Do(func() {
 		if c.device != nil {
@@ -219,7 +221,7 @@ func (c *Capture) Stop() {
 	})
 }
 
-// Description returns a human readable label of the device in use.
+// Description restituisce un'etichetta leggibile del dispositivo in uso.
 func (c *Capture) Description() string {
 	return fmt.Sprintf("%s — %d Hz, s16 mono, periodo 100 ms", c.name, c.device.SampleRate())
 }
